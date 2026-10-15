@@ -1,0 +1,47 @@
+# Environment / secrets — NEVER commit these
+.env
+.env.local
+.env.production
+.env.*.local
+*.env
+
+# Local config overrides
+config.local.js
+config.prod.js
+
+# Node (if you add a build step later)
+node_modules/
+package-lock.json
+yarn.lock
+.pnp.*
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Uploads (user-supplied logos — don't commit binary blobs)
+public/uploads/*.png
+public/uploads/*.jpg
+public/uploads/*.svg
+public/uploads/*.gif
+
+# Vercel
+.vercel/

@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0A0F1A" />
+  <title>Community QR Check-in</title>
+  <link rel="stylesheet" href="src/style.css" />
+  <!-- html5-qrcode: handles camera scanning -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+  <div id="app">
+
+    <!-- Background watermark logo -->
+    <div id="bg-logo"></div>
+
+    <!-- ── Home / Role Select ─────────────────────────────── -->
+    <div class="screen" id="screen-home">
+      <div class="brand" style="width:100%;">
+        <div class="brand-title" id="event-name">Community Meetup Check-in</div>
+        <div class="brand-sub">QR · Attendance · Analytics</div>
+      </div>
+
+      <div class="role-cards">
+        <button class="role-card" onclick="App.selectRole('volunteer')" aria-label="Continue as Volunteer">
+          <div class="role-icon">📱</div>
+          <div>
+            <div class="role-label">Volunteer</div>
+            <div class="role-desc">Scan attendee QR codes at the door</div>
+          </div>
+        </button>
+
+        <button class="role-card" onclick="App.selectRole('admin')" aria-label="Continue as Admin">
+          <div class="role-icon admin">🔐</div>
+          <div>
+            <div class="role-label">Admin</div>
+            <div class="role-desc">Manage settings, users &amp; analytics</div>
+          </div>
+        </button>
+      </div>
+
+      <p class="text-muted text-sm text-center mt-3" style="max-width:280px;">
+        Volunteer? Log in with your registered phone number.
+        Admin? Use your 4-digit PIN.
+      </p>
+    </div>
+
+    <!-- ── Volunteer Login (phone number) ─────────────────── -->
+    <div class="screen" id="screen-vol-login">
+      <div class="brand">
+        <div class="brand-title">Volunteer Login</div>
+        <div class="brand-sub">Enter your registered phone</div>
+      </div>
+
+      <div class="phone-row">
+        <select id="vol-country-code" aria-label="Country code">
+          <option value="+91">🇮🇳 +91</option>
+          <option value="+1">🇺🇸 +1</option>
+          <option value="+44">🇬🇧 +44</option>
+          <option value="+65">🇸🇬 +65</option>
+          <option value="+61">🇦🇺 +61</option>
+          <option value="+60">🇲🇾 +60</option>
+        </select>
+        <input
+          type="tel"
+          id="vol-phone-input"
+          placeholder="98XXXXXXXX"
+          autocomplete="tel-national"
+          inputmode="numeric"
+          maxlength="15"
+          aria-label="Phone number"
+        />
+      </div>
+
+      <button class="btn btn-primary btn-full" onclick="App.submitPhone()">
+        Login →
+      </button>
+
+      <p class="text-muted text-sm text-center mt-2">
+        Your phone number must be pre-registered by the event admin.
+      </p>
+
+      <button class="btn btn-ghost btn-full mt-2" onclick="App.selectRole(null); showScreen('screen-home')">
+        ← Back
+      </button>
+    </div>
+
+    <!-- ── Admin PIN ───────────────────────────────────────── -->
+    <div class="screen" id="screen-admin-pin">
+      <div class="brand">
+        <div class="brand-title">Admin PIN</div>
+        <div class="brand-sub">4-digit access code</div>
+      </div>
+
+      <div class="pin-display" role="group" aria-label="PIN entry">
+        <div class="pin-dot" id="admin-dot-0"></div>
+        <div class="pin-dot" id="admin-dot-1"></div>
+        <div class="pin-dot" id="admin-dot-2"></div>
+        <div class="pin-dot" id="admin-dot-3"></div>
+      </div>
+
+      <div class="numpad" id="admin-numpad" role="group" aria-label="Number pad"></div>
+
+      <button class="btn btn-ghost btn-full mt-2" onclick="showScreen('screen-home')">
+        ← Back
+      </button>
+    </div>
+
+    <!-- ── QR Scanner ──────────────────────────────────────── -->
+    <div class="screen" id="screen-scanner">
+      <div class="scanner-header w-full">
+        <span class="scanner-role-badge" id="scanner-role-badge">📱 Volunteer</span>
+        <button class="btn btn-ghost" onclick="App.logout('manual')" style="padding:0.5rem 0.9rem;font-size:0.72rem;">
+          Logout
+        </button>
+      </div>
+
+      <div id="qr-reader-container">
+        <div id="qr-reader"></div>
+        <div class="scan-overlay">
+          <div class="scan-frame"></div>
+          <div class="scan-line"></div>
+        </div>
+      </div>
+
+      <div class="manual-row mt-1">
+        <input
+          id="manual-uuid"
+          type="text"
+          placeholder="Manual: paste attendee ID"
+          autocomplete="off"
+          aria-label="Manual attendee ID"
+        />
+        <button class="btn btn-primary" onclick="App.manualCheckin()">Go</button>
+      </div>
+
+      <div id="result-card" class="result-card"></div>
+
+      <div class="scan-stats">
+        <div class="stat-chip">
+          <div class="stat-num" id="scan-count">0</div>
+          <div class="stat-lbl">Scans</div>
+        </div>
+        <div class="stat-chip">
+          <div class="stat-num" id="attend-count">0</div>
+          <div class="stat-lbl">Attended</div>
+        </div>
+        <div class="stat-chip">
+          <div class="stat-num" id="reg-count">0</div>
+          <div class="stat-lbl">Registered</div>
+        </div>
+      </div>
+
+      <!-- Admin-only: go back to dashboard -->
+      <div id="admin-scanner-back" style="display:none;width:100%;margin-top:0.75rem;">
+        <button class="btn btn-ghost btn-full" onclick="showScreen('screen-admin')">
+          ← Admin Dashboard
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Admin Dashboard ────────────────────────────────── -->
+    <div class="screen" id="screen-admin">
+      <div class="scanner-header w-full">
+        <span class="brand-title" style="font-size:1.1rem;">Admin Dashboard</span>
+        <button class="btn btn-ghost" onclick="App.logout('manual')" style="padding:0.5rem 0.9rem;font-size:0.72rem;">
+          Logout
+        </button>
+      </div>
+
+      <!-- Scan button at top -->
+      <button class="btn btn-primary btn-full mb-1" onclick="App.adminGoToScanner()">
+        📷 Open Scanner
+      </button>
+
+      <!-- Tabs -->
+      <div class="admin-tabs" role="tablist">
+        <button class="tab-btn active" role="tab" data-tab="sheets"
+                onclick="App.adminTab('sheets')">⚙️ Sheets</button>
+        <button class="tab-btn" role="tab" data-tab="users"
+                onclick="App.adminTab('users')">👥 Users</button>
+        <button class="tab-btn" role="tab" data-tab="stats"
+                onclick="App.adminTab('stats')">📊 Stats</button>
+        <button class="tab-btn" role="tab" data-tab="audit"
+                onclick="App.adminTab('audit')">📋 Audit</button>
+        <button class="tab-btn" role="tab" data-tab="branding"
+                onclick="App.adminTab('branding')">🎨 Branding</button>
+        <button class="tab-btn" role="tab" data-tab="pin"
+                onclick="App.adminTab('pin')">🔐 PIN</button>
+      </div>
+
+      <!-- ── Tab: Sheets Config ──────────────────────────── -->
+      <div class="tab-panel active" id="panel-sheets">
+        <div class="field-group">
+          <div class="section-label">Apps Script URL</div>
+          <input class="field-input" id="admin-script-url"
+                 type="url" placeholder="https://script.google.com/macros/s/.../exec"
+                 autocomplete="off" spellcheck="false" />
+          <div class="field-hint">Deploy your Code.gs as a Web App → paste URL here</div>
+        </div>
+
+        <div class="field-group">
+          <div class="section-label">Sheet ID</div>
+          <input class="field-input" id="admin-sheet-id"
+                 type="text" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
+                 autocomplete="off" spellcheck="false" />
+          <div class="field-hint">From your Google Sheet URL: /spreadsheets/d/<strong>THIS_PART</strong>/edit</div>
+        </div>
+
+        <div class="field-group">
+          <div class="section-label">Registrations tab name</div>
+          <input class="field-input" id="admin-sheet-tab" type="text" placeholder="Registrations" />
+        </div>
+
+        <div class="section-label">Column mapping (0-indexed)</div>
+        <div class="col-grid mb-1">
+          <div class="field-group">
+            <div class="field-label">Name col</div>
+            <input class="field-input" id="col-name" type="number" min="0" value="0" />
+          </div>
+          <div class="field-group">
+            <div class="field-label">Email col</div>
+            <input class="field-input" id="col-email" type="number" min="0" value="1" />
+          </div>
+          <div class="field-group">
+            <div class="field-label">Phone col</div>
+            <input class="field-input" id="col-phone" type="number" min="0" value="2" />
+          </div>
+          <div class="field-group">
+            <div class="field-label">UUID col</div>
+            <input class="field-input" id="col-uuid" type="number" min="0" value="3" />
+          </div>
+          <div class="field-group">
+            <div class="field-label">Status col</div>
+            <input class="field-input" id="col-status" type="number" min="0" value="4" />
+          </div>
+          <div class="field-group">
+            <div class="field-label">Time col</div>
+            <input class="field-input" id="col-time" type="number" min="0" value="5" />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <div class="section-label">Event name</div>
+          <input class="field-input" id="admin-event-name" type="text" placeholder="Docker Bangalore Meetup #12" />
+        </div>
+
+        <div style="display:flex;gap:0.5rem;">
+          <button class="btn btn-primary" onclick="App.saveSheetConfig()">Save</button>
+          <button class="btn btn-ghost" onclick="App.testConnection()">Test Connection</button>
+        </div>
+      </div>
+
+      <!-- ── Tab: Users ─────────────────────────────────── -->
+      <div class="tab-panel" id="panel-users">
+        <div class="section-label" style="margin-bottom:0.75rem;">Add Volunteer / Admin</div>
+        <div class="field-group">
+          <input class="field-input" id="new-user-name" type="text" placeholder="Full name" />
+          <input class="field-input" id="new-user-phone" type="tel" placeholder="Phone (no country code)"
+                 inputmode="numeric" />
+          <select class="field-input" id="new-user-role">
+            <option value="volunteer">Volunteer</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button class="btn btn-primary" onclick="App.addUser()">Add User</button>
+        </div>
+        <div class="section-label" style="margin-bottom:0.5rem;">Current Users</div>
+        <div class="scroll-panel">
+          <table class="users-table">
+            <thead>
+              <tr><th>Name</th><th>Phone</th><th>Role</th></tr>
+            </thead>
+            <tbody id="users-tbody">
+              <tr><td colspan="3" class="text-muted text-sm">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Tab: Stats ─────────────────────────────────── -->
+      <div class="tab-panel" id="panel-stats">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-num" id="stats-registered">—</span>
+            <span class="stat-lbl">Registered</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-num" id="stats-attended" style="color:var(--accent);">—</span>
+            <span class="stat-lbl">Attended</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-num" id="stats-pending" style="color:var(--warn);">—</span>
+            <span class="stat-lbl">Pending</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-num" id="stats-rate" style="color:var(--info);">—</span>
+            <span class="stat-lbl">Show Rate</span>
+          </div>
+        </div>
+        <button class="btn btn-ghost" onclick="App.refreshStats()">↻ Refresh</button>
+      </div>
+
+      <!-- ── Tab: Audit Log ─────────────────────────────── -->
+      <div class="tab-panel" id="panel-audit">
+        <div class="section-label mb-1">Last 50 events (most recent first)</div>
+        <div class="scroll-panel">
+          <table class="audit-table">
+            <thead>
+              <tr><th>Time</th><th>Event</th><th>User</th><th>Detail</th></tr>
+            </thead>
+            <tbody id="audit-tbody">
+              <tr><td colspan="4" class="text-muted text-sm">No events yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Tab: Branding ──────────────────────────────── -->
+      <div class="tab-panel" id="panel-branding">
+        <div class="section-label mb-1">Background Watermark Logo</div>
+        <div class="logo-preview">
+          <img id="logo-preview-img" src="" alt="" style="display:none;" />
+          <div id="logo-placeholder" class="text-muted text-sm" style="display:flex;align-items:center;justify-content:center;gap:0.5rem;">
+            📂 Upload logo
+          </div>
+        </div>
+
+        <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
+          <label class="btn btn-ghost" style="cursor:pointer;">
+            Upload PNG/SVG
+            <input type="file" accept="image/*" style="display:none;"
+                   onchange="App.handleLogoUpload(this)" />
+          </label>
+          <button class="btn btn-ghost" onclick="App.clearLogo()">Remove</button>
+        </div>
+
+        <div class="field-group">
+          <div class="section-label">Opacity (%)</div>
+          <input class="field-input" id="logo-opacity" type="range" min="1" max="30" value="8" />
+        </div>
+
+        <div class="field-group">
+          <div class="section-label">Size (px)</div>
+          <input class="field-input" id="logo-size" type="number" min="80" max="500" value="280" />
+        </div>
+
+        <div class="field-group">
+          <div class="section-label">Position</div>
+          <select class="field-input" id="logo-position">
+            <option value="center">Center</option>
+            <option value="top-left">Top Left</option>
+            <option value="top-right">Top Right</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <div class="section-label">Accent Color</div>
+          <div class="color-row">
+            <input type="color" id="admin-accent" value="#00C896"
+                   class="color-swatch" aria-label="Accent color" />
+            <span class="text-muted text-sm">Brand colour for buttons &amp; highlights</span>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:0.5rem;">
+          <button class="btn btn-primary" onclick="App.saveLogoSettings(); App.saveAccent();">Save Branding</button>
+        </div>
+      </div>
+
+      <!-- ── Tab: Change PIN ────────────────────────────── -->
+      <div class="tab-panel" id="panel-pin">
+        <div class="section-label mb-1" id="pin-step-label">Enter new PIN</div>
+        <div class="pin-display" style="justify-content:center;margin-bottom:1rem;">
+          <div class="pin-dot" id="new-pin-dot-0"></div>
+          <div class="pin-dot" id="new-pin-dot-1"></div>
+          <div class="pin-dot" id="new-pin-dot-2"></div>
+          <div class="pin-dot" id="new-pin-dot-3"></div>
+        </div>
+        <div style="display:flex;justify-content:center;">
+          <div class="numpad" id="new-pin-numpad" style="max-width:240px;"></div>
+        </div>
+        <p class="text-muted text-sm text-center mt-2">
+          Default PIN is <strong>9999</strong>. Change it after first login.
+        </p>
+      </div>
+
+    </div><!-- /screen-admin -->
+
+    <!-- ── Inactivity overlay ──────────────────────────────── -->
+    <div id="inactivity-overlay" role="dialog" aria-modal="true" aria-label="Session expiry warning">
+      <div class="inactivity-countdown" id="inactivity-count">30</div>
+      <div class="inactivity-msg">
+        No activity detected.<br />You will be logged out in…
+      </div>
+      <div class="inactivity-bar-wrap">
+        <div class="inactivity-bar" id="inactivity-bar"></div>
+      </div>
+      <button class="btn btn-primary" onclick="App.stayLoggedIn()">Stay logged in</button>
+      <button class="btn btn-ghost" onclick="App.logout('manual')">Logout now</button>
+    </div>
+
+    <!-- ── Toast ──────────────────────────────────────────── -->
+    <div id="toast" role="status" aria-live="polite"></div>
+
+  </div><!-- /#app -->
+
+  <script src="src/config.js"></script>
+  <script src="src/app.js"></script>
+
+  <!-- showScreen helper (used inline by some back buttons) -->
+  <script>
+    function showScreen(id) {
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      const el = document.getElementById(id);
+      if (el) el.classList.add("active");
+      // Show/hide admin-back button on scanner
+      const adminBack = document.getElementById("admin-scanner-back");
+      if (adminBack) {
+        // Accessed via adminGoToScanner from admin dashboard
+        adminBack.style.display = (id === "screen-scanner" && typeof App !== "undefined") ? "block" : "none";
+      }
+    }
+  </script>
+
+</body>
+</html>
